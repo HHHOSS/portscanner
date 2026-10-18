@@ -6,10 +6,11 @@
 import socket
 import sys
 import datetime
+import json
+import os
 
 CLOSED_CODES  = {111, 10061}
 TIMEOUT_CODES = {110, 10035}
-
 
 
 def make_filename(target):
@@ -18,7 +19,7 @@ def make_filename(target):
     """
     now = datetime.datetime.now()
     text = now.strftime("%Y%m%d_%H%M%S")
-    safe_ip = target.replace(".", "_")    
+    safe_ip = target.replace(".", "_")   
     return f"scan_{safe_ip}_{text}.json"
 
 
@@ -45,6 +46,25 @@ def scan_port(target, port):
     return {"port": port, "status": status, "code": result}
 
 
+def save_result(result, target):
+    """
+    result:接收scan_ports返回的字典
+    target:接收用户输入的ip
+    将扫描结果存成json文件并生成新目录"output"(如已存在就不会创建)
+    返回文件路径
+    """
+    filename = make_filename(target)
+
+    os.makedirs("output", exist_ok=True)
+
+    filepath = os.path.join("output", filename)
+
+    with open(filepath, "w", encoding="utf-8") as f:
+        json.dump(result, f, ensure_ascii=False, indent=2)
+
+    return filepath
+
+
 def scan_ports(target, ports):
     """
     扫描一批端口，按状态分类返回。
@@ -64,7 +84,7 @@ def scan_ports(target, ports):
     buckets["target"] = target
     buckets["ports"]  = list(ports)
     return buckets
- 
+
 
 def main():
     """
@@ -79,7 +99,7 @@ def main():
         sys.exit(1)
 
     target = sys.argv[1]
-    
+
     try:
         start = int(sys.argv[2])
         end = int(sys.argv[3])
@@ -88,9 +108,11 @@ def main():
         sys.exit(1)
 
     result = scan_ports(target, range(start, end + 1))
+    fliepath = save_result(result, target)
     print("开放：", result["open"])
     print("关闭数：", len(result["closed"]))
     print("超时数：", len(result["timeout"]))
+    print(f"结果已保存到：{fliepath}")
 
 
 if __name__ == '__main__':
