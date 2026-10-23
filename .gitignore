@@ -1,0 +1,17 @@
+# 编辑器
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 密钥 / 环境（公开仓库绝对不能提交）
+.env
+*.key
+*.pem
+
+# 扫描结果（输出，不该进版本库）
+*.json
