@@ -8,6 +8,8 @@ import sys
 import datetime
 import json
 import os
+import threading
+import queue
 
 CLOSED_CODES  = {111, 10061}
 TIMEOUT_CODES = {110, 10035}
@@ -65,21 +67,47 @@ def save_result(result, target):
     return filepath
 
 
-def scan_ports(target, ports):
+def worker(target, port_queue, buckets, lock):
     """
-    扫描一批端口，按状态分类返回。
-    ports: 任何可遍历的端口集合(range / list 都行）
+    一个线程的工作：不断从队列取端口扫描，直到队列空
     """
-    buckets = {
-        "open": [],
-        "closed": [],
-        "timeout": [],
-    }
+    while True:
+        try:
+            port = port_queue.get_nowait()      # ⭐ 非阻塞取，取不到立刻抛异常
+        except queue.Empty:
+            return                              # ⭐ 队列空了 → 这个线程收工
 
-    for port in ports:
         r = scan_port(target, port)
+
         if r["status"] in buckets:
-            buckets[r["status"]].append(r["port"])
+            with lock:                          # ⭐ 加锁
+                buckets[r["status"]].append(r["port"])
+
+
+def scan_ports(target, ports, threads=50):
+    """
+    扫描一批端口，按状态分类返回。（多线程版）
+    threads: 开几个线程
+    """
+    buckets = {"open": [], "closed": [], "timeout": []}
+
+    # ① 所有端口入队
+    port_queue = queue.Queue()
+    for p in ports:
+        port_queue.put(p)
+
+    lock = threading.Lock()
+
+    # ② 开 threads 个线程，全部启动
+    workers = []
+    for _ in range(threads):
+        t = threading.Thread(target=worker, args=(target, port_queue, buckets, lock))
+        t.start()
+        workers.append(t)
+
+    # ③ 主线程等它们全部结束
+    for t in workers:
+        t.join()
 
     buckets["target"] = target
     buckets["ports"]  = list(ports)
